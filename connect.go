@@ -31,20 +31,26 @@ type cluster struct {
 
 func main() {
 	addrs := []string{
-		"172.17.0.89",
-		"172.17.0.91",
-		"172.17.0.92",
-		"172.17.0.93",
+		"172.17.0.96",
+		"172.17.0.97",
+		"172.17.0.98",
+		"172.17.0.99",
 	}
 
-	for _, server := range addrs {
-		client := redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:    []string{server + ":6379"},
-			Password: "",
-		})
+	if len(addrs) < 3 {
+		fmt.Println("insufficient cluster members")
+	}
 
-		pong, err := client.Ping().Result()
-		fmt.Println(pong, err)
+	cluster := make(map[string]map[string]*redisNode, len(addrs))
+
+	for _, server := range addrs {
+		client := redis.NewClusterClient(
+			&redis.ClusterOptions{
+				Addrs:    []string{server + ":6379"},
+				Password: "",
+			},
+		)
+
 		info := client.ClusterInfo().Val()
 
 		if strings.Contains(info, "cluster_state:fail") {
@@ -55,24 +61,33 @@ func main() {
 
 		nodes := client.ClusterNodes().Val()
 		n_nodes := strings.Split(nodes, "\n")
-		for _, val := range n_nodes {
-			node := strings.Split(val, " ")
 
-			if len(node) > 7 {
+		fmt.Println("checking server", server)
+		if _, ok := cluster[server]; !ok {
+			cluster[server] = make(map[string]*redisNode, len(n_nodes))
+		}
+
+		for _, val := range n_nodes {
+			field := strings.Split(val, " ")
+
+			if len(field) > 7 {
 				bla := &redisNode{
-					id:          node[0],
-					addr:        node[1],
-					flags:       strings.Split(node[2], ","),
-					master:      node[3],
-					pingSent:    node[4],
-					pongRecv:    node[5],
-					configEpoch: node[6],
-					linkState:   node[7],
-					slot:        make([][]int, len(node[8:])),
+					id:          field[0],
+					addr:        field[1],
+					flags:       strings.Split(field[2], ","),
+					master:      field[3],
+					pingSent:    field[4],
+					pongRecv:    field[5],
+					configEpoch: field[6],
+					linkState:   field[7],
+					slot:        make([][]int, len(field[8:])),
 				}
 
-				for idx, item := range node[8:] {
+				for idx, item := range field[8:] {
 					value := strings.Split(item, "-")
+
+					fmt.Println("debug", value)
+
 					first, _ := strconv.Atoi(value[0])
 
 					if len(value) > 1 {
@@ -83,20 +98,34 @@ func main() {
 					}
 				}
 
-				fmt.Println(bla)
+				for _, flag := range bla.flags {
+					if flag == "myself" {
+						fmt.Println(server, bla.slot)
+					}
+				}
+
+				cluster[server][bla.addr] = bla
 
 			}
-		}
 
-		return
+		}
 
 		// lets meet!!
 		for _, meet := range addrs {
-			err := client.ClusterMeet(meet, "6379").Err()
-			if err != nil {
-				fmt.Println(err)
+
+			_, ok := cluster[server][meet+":6379"]
+			if ok {
+				fmt.Println("node already known")
+			} else {
+				fmt.Println("adding new node")
+
+				err := client.ClusterMeet(meet, "6379").Err()
+				if err != nil {
+					fmt.Println(err)
+				}
 			}
 		}
+
 	}
 
 	// lets slot it
@@ -124,7 +153,7 @@ func main() {
 	fmt.Println(result)
 
 	// let add slots
-	for idx, server := range addrs {
+	for idx, server := range addrs[:CLUSTER_MASTERS] {
 		client := redis.NewClusterClient(
 			&redis.ClusterOptions{
 				Addrs:    []string{server + ":6379"},
@@ -133,16 +162,25 @@ func main() {
 		)
 
 		if len(result[idx]) > 1 {
-			err := client.ClusterAddSlotsRange(result[idx][0], result[idx][1])
+			err := client.ClusterAddSlotsRange(result[idx][0], result[idx][1]).Err()
 			if err != nil {
 				fmt.Println(err)
 			} else {
-				err := client.ClusterAddSlots(result[idx][0])
+				err := client.ClusterAddSlots(result[idx][0]).Err()
 				if err != nil {
 					fmt.Println(err)
 				}
 			}
 
+		}
+	}
+
+	fmt.Println(cluster)
+
+	for key, value := range cluster {
+		fmt.Println(key)
+		for _, new_value := range value {
+			fmt.Println("-->", new_value.flags, new_value.slot)
 		}
 	}
 }
