@@ -6,4 +6,7 @@ dns:
     - "/var/run/docker.sock:/tmp/docker.sock"
 
 redis:
-  build: redis/
+  build: docker/redis/
+
+tribs:
+  build: docker/redis-trib/
