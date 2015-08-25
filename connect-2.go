@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+const CLUSTER_HASH_SLOTS = 16383
+const CLUSTER_MASTERS = 3
+
 // A data structure to hold key/value pairs
 type Pair struct {
 	Key   string
@@ -27,17 +30,70 @@ type simpleNode struct {
 	slots  bool
 }
 
+func generateSlots(clusterSize int) [][]int {
+	// lets slot it
+	step := CLUSTER_HASH_SLOTS / clusterSize
+	result := make([][]int, clusterSize)
+	for i := 0; i < clusterSize; i++ {
+
+		first := i * step
+		last := (i + 1) * step
+
+		if i > 0 {
+			first += 1
+		}
+
+		if (i + 1) == clusterSize {
+			last = CLUSTER_HASH_SLOTS
+		}
+
+		if first == last {
+			result[i] = []int{first}
+		} else {
+			result[i] = []int{first, last}
+		}
+	}
+
+	return result
+}
+
+func attachSlotsToServer(serversList []string, slotList [][]int) {
+	numberOfMasters := len(slotList)
+
+	for idx, server := range serversList[:numberOfMasters] {
+		client := redis.NewClient(
+			&redis.Options{
+				Addr:     server,
+				Password: "",
+			},
+		)
+
+		if len(slotList[idx]) > 1 {
+			err := client.ClusterAddSlotsRange(slotList[idx][0], slotList[idx][1]).Err()
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				err := client.ClusterAddSlots(slotList[idx][0]).Err()
+				if err != nil {
+					fmt.Println(err)
+				}
+			}
+		}
+	}
+}
+
 func main() {
 	addrs := []string{
-		"172.17.0.96:6379",
-		"172.17.0.97:6379",
-		"172.17.0.98:6379",
-		"172.17.0.99:6379",
+		"172.17.0.113:6379",
+		"172.17.0.105:6379",
+		"172.17.0.106:6379",
+		"172.17.0.107:6379",
+		"172.17.0.108:6379",
 	}
 
 	cluster := make(map[string]int)
 
-	next_slave := []string{}
+	slaveCandidates := []string{}
 
 	if len(addrs) < 3 {
 		fmt.Println("insufficient cluster members")
@@ -52,10 +108,28 @@ func main() {
 			},
 		)
 
+		for _, neighbourMember := range addrs {
+			if server == neighbourMember {
+				continue
+			}
+
+			addr := strings.Split(neighbourMember, ":")[0]
+			port := strings.Split(neighbourMember, ":")[1]
+
+			err := client.ClusterMeet(addr, port).Err()
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+
 		nodes := client.ClusterNodes().Val()
 		memberNodes := strings.Split(nodes, "\n")
 
 		for _, myself := range memberNodes {
+			if strings.Contains(myself, "slave,fail") {
+
+			}
+
 			if strings.Contains(myself, "myself") {
 				myselfInfo := strings.Split(myself, " ")
 
@@ -75,24 +149,32 @@ func main() {
 				}
 
 				if info.master == "-" && (!info.slots) {
-					next_slave = append(next_slave, server)
+					slaveCandidates = append(slaveCandidates, server)
 				} else {
 					if _, ok := cluster[info.id]; !ok {
 						cluster[info.id] = 0
 					}
 				}
-
-				//fmt.Println(info)
-				//fmt.Println(myselfInfo[1])
 			}
 		}
 	}
 
 	fmt.Println("cluster members", cluster)
-	fmt.Println("possible slaves", next_slave)
+	fmt.Println("possible slaves", slaveCandidates)
 
-	if len(next_slave) > 0 {
-		for _, server := range next_slave {
+	if len(cluster) == 0 {
+		redisSlots := generateSlots(3)
+
+		// add masters
+		attachSlotsToServer(addrs, redisSlots)
+
+		// calculate slaves
+
+		return
+	}
+
+	if len(slaveCandidates) > 0 {
+		for _, server := range slaveCandidates {
 			client := redis.NewClient(
 				&redis.Options{
 					Addr:     server,
