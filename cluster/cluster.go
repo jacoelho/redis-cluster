@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"errors"
 	"fmt"
 	"gopkg.in/redis.v3"
 	"sort"
@@ -69,6 +70,13 @@ func parseNode(line string) *ClusterNode {
 		linkState:   fields[7],
 		slots:       fields[8:],
 	}
+
+	//only port defined
+	checkAddr := strings.Split(node.addr, ":")
+	if len(checkAddr[0]) == 0 {
+		return nil
+	}
+
 	return node
 }
 
@@ -130,6 +138,7 @@ func NewCluster(servers []string) *Cluster {
 
 		err := client.Ping().Err()
 		if err != nil {
+			fmt.Println("error ping")
 			return nil
 		}
 
@@ -155,9 +164,6 @@ func MeetCluster(redisCluster *Cluster) error {
 				if err != nil {
 					return err
 				}
-				fmt.Println(neighbour, "handshake sent")
-			} else {
-				fmt.Println(neighbour, "is already known")
 			}
 		}
 	}
@@ -249,6 +255,10 @@ func AssignSlaves(unassigned []string, masterCount map[string]int) {
 func AssignClusterSlots(unassigned []string, clusterSize int) error {
 	slots := GenerateClusterSlots(clusterSize)
 
+	if len(unassigned) < clusterSize {
+		return errors.New("invalid list")
+	}
+
 	for idx, server := range unassigned[:clusterSize] {
 		client := redis.NewClient(
 			&redis.Options{
@@ -257,16 +267,12 @@ func AssignClusterSlots(unassigned []string, clusterSize int) error {
 			},
 		)
 
+		fmt.Println("assing slot", slots[idx], "to", server)
+
 		if len(slots[idx]) > 1 {
-			err := client.ClusterAddSlotsRange(slots[idx][0], slots[idx][1]).Err()
-			if err != nil {
-				return err
-			} else {
-				err := client.ClusterAddSlots(slots[idx][0]).Err()
-				if err != nil {
-					return err
-				}
-			}
+			client.ClusterAddSlotsRange(slots[idx][0], slots[idx][1])
+		} else {
+			client.ClusterAddSlots(slots[idx][0])
 		}
 	}
 	return nil

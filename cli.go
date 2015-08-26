@@ -2,30 +2,46 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"redis-cluster/cluster"
 	"time"
 )
 
 func main() {
-	redisCluster := cluster.NewCluster([]string{"172.17.0.120:6379", "172.17.0.119:6379", "172.17.0.116:6379"})
+	args := os.Args[1:]
+	servers := make([]string, len(args))
 
-	//cluster.MeetCluster(redisCluster)
+	for idx, arg := range args {
+		servers[idx] = arg + ":6379"
+	}
+	redisCluster := cluster.NewCluster(servers)
+	if redisCluster == nil {
+		panic("error creating cluster")
+	}
+
+	cluster.MeetCluster(redisCluster)
 
 	time.Sleep(5 * 1000 * time.Millisecond)
 
 	unassigned, count := cluster.CheckCluster(redisCluster)
 
+	fmt.Print("-->", count)
+
 	if len(count) > 0 && len(count) < 3 {
 		panic("something is wrong")
 	}
 
+	fmt.Println("unassigned", unassigned)
 	if len(count) == 0 {
-		cluster.AssignClusterSlots(unassigned, 4)
+		err := cluster.AssignClusterSlots(unassigned, 4)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 
 	unassigned, count = cluster.CheckCluster(redisCluster)
 
-	cluster.AssignSlaves(unassigned, count)
+	//cluster.AssignSlaves(unassigned, count)
 
 	fmt.Println(cluster.CheckCluster(redisCluster))
 
