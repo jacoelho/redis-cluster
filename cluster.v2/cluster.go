@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"errors"
 	"gopkg.in/redis.v3"
 	"strconv"
 	"strings"
@@ -10,8 +11,8 @@ import (
 
 const CLUSTER_HASH_SLOTS = 16383
 const CLUSTER_QUORUM = 3
-const FAIL = false
-const OK = true
+const REDIS_FAIL = false
+const REDIS_OK = true
 
 type RedisNode struct {
 	id     string
@@ -25,10 +26,16 @@ type RedisNode struct {
 	slots []string
 }
 
+type ClusterNode struct {
+	address string
+	pod     string
+	client  *redis.Client
+}
+
 type Cluster struct {
 	State           bool
 	Slots_assigned  int
-	Cluster_members []*redis.Client
+	Cluster_members []*ClusterNode
 }
 
 func contains(slice []string, value string) bool {
@@ -38,6 +45,33 @@ func contains(slice []string, value string) bool {
 		}
 	}
 	return false
+}
+
+func GenerateClusterSlots(clusterSize int) [][]int {
+	step := CLUSTER_HASH_SLOTS / clusterSize
+	result := make([][]int, clusterSize)
+
+	for i := 0; i < clusterSize; i++ {
+		first := i * step
+		last := (i + 1) * step
+
+		if i > 0 {
+			first += 1
+		}
+
+		if (i + 1) == clusterSize {
+			last = CLUSTER_HASH_SLOTS
+		}
+
+		// avoid issues with step size 1
+		if first == last {
+			result[i] = []int{first}
+		} else {
+			result[i] = []int{first, last}
+		}
+	}
+
+	return result
 }
 
 func parseNodeOutput(line string) *RedisNode {
@@ -75,7 +109,7 @@ func MeetNode(client *redis.Client, address string) error {
 }
 
 func GetClusterInfo(client *redis.Client) (status bool, slots int) {
-	new_status := FAIL
+	new_status := REDIS_FAIL
 	used_slots := 0
 
 	tmp, err := client.ClusterInfo().Result()
@@ -87,7 +121,7 @@ func GetClusterInfo(client *redis.Client) (status bool, slots int) {
 	result := strings.Split(tmp, "\n")
 
 	if strings.Contains(result[0], "cluster_state:ok") {
-		new_status = OK
+		new_status = REDIS_OK
 	}
 
 	value := strings.Split(result[1], ":")[1]
@@ -113,15 +147,18 @@ func GetNodes(client *redis.Client) map[string]*RedisNode {
 
 func NewCluster(initialList []string) *Cluster {
 	cluster := &Cluster{
-		State:           OK,
+		State:           REDIS_OK,
 		Slots_assigned:  0,
-		Cluster_members: make([]*redis.Client, 0),
+		Cluster_members: make([]*ClusterNode, 0),
 	}
 
 	for _, address := range initialList {
+		ip := strings.Split(address, ",")[0]
+		pod := strings.Split(address, ",")[1]
+
 		client := redis.NewClient(
 			&redis.Options{
-				Addr:     address,
+				Addr:     ip,
 				Password: "",
 			},
 		)
@@ -147,17 +184,38 @@ func NewCluster(initialList []string) *Cluster {
 		}
 
 		//client.Close()
-		cluster.Cluster_members = append(cluster.Cluster_members, client)
+		cluster.Cluster_members = append(cluster.Cluster_members, &ClusterNode{address: ip, pod: pod, client: client})
 	}
 
 	return cluster
 }
 
+func (cluster *Cluster) AssignMasters(size int) error {
+	slots := GenerateClusterSlots(size)
+
+	if len(cluster.Cluster_members) < size {
+		return errors.New("failed add master servers")
+	}
+
+	for idx, server := range cluster.Cluster_members[:size] {
+		client := server.client
+
+		// range [1000 2000] or single value [1000] [1001]
+		if len(slots[idx]) > 1 {
+			client.ClusterAddSlotsRange(slots[idx][0], slots[idx][1])
+		} else {
+			client.ClusterAddSlots(slots[idx][0])
+		}
+	}
+	return nil
+}
+
 func (cluster *Cluster) Bootstrap() error {
-	if cluster.State == FAIL && cluster.Slots_assigned == 0 {
+	if cluster.State == REDIS_FAIL && cluster.Slots_assigned == 0 {
 		fmt.Println("Assign Masters")
+		cluster.AssignMasters(3)
 		fmt.Println("Assign Slaves")
-	} else if cluster.State == OK {
+	} else if cluster.State == REDIS_OK {
 		fmt.Println("Assign Slaves")
 	} else {
 		fmt.Println("cluster need manual repair")
