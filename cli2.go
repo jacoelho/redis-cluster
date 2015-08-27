@@ -25,7 +25,7 @@ func main() {
 		panic("error creating cluster")
 	}
 
-	redisCluster.Bootstrap()
+	redisCluster.Bootstrap(4)
 
 	for _, item := range redisCluster.Cluster_members {
 		fmt.Println(item)

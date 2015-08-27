@@ -26,6 +26,11 @@ type RedisNode struct {
 	slots []string
 }
 
+type ClusterTopology struct {
+	masters    map[string]int
+	candidates []string
+}
+
 type ClusterNode struct {
 	address string
 	pod     string
@@ -108,6 +113,27 @@ func MeetNode(client *redis.Client, address string) error {
 	return nil
 }
 
+func GetTopology(client *redis.Client) *ClusterTopology {
+	nodes := GetNodes(client)
+	result := &ClusterTopology{
+		masters:    make(map[string]int),
+		candidates: make([]string, 0),
+	}
+
+	for _, node := range nodes {
+		if node.master != "-" {
+			result.masters[node.master] += 1
+		} else if node.master == "-" && len(node.slots) > 0 {
+			if _, ok := result.masters[node.id]; !ok {
+				result.masters[node.id] = 0
+			}
+		} else {
+			result.candidates = append(result.candidates, node.addr)
+		}
+	}
+	return result
+}
+
 func GetClusterInfo(client *redis.Client) (status bool, slots int) {
 	new_status := REDIS_FAIL
 	used_slots := 0
@@ -186,7 +212,6 @@ func NewCluster(initialList []string) *Cluster {
 		//client.Close()
 		cluster.Cluster_members = append(cluster.Cluster_members, &ClusterNode{address: ip, pod: pod, client: client})
 	}
-
 	return cluster
 }
 
@@ -210,13 +235,22 @@ func (cluster *Cluster) AssignMasters(size int) error {
 	return nil
 }
 
-func (cluster *Cluster) Bootstrap() error {
+func (cluster *Cluster) AssignSlaves() error {
+	pivotal := cluster.Cluster_members[0]
+
+	fmt.Println(GetTopology(pivotal.client))
+
+	return nil
+}
+
+func (cluster *Cluster) Bootstrap(size int) error {
 	if cluster.State == REDIS_FAIL && cluster.Slots_assigned == 0 {
-		fmt.Println("Assign Masters")
-		cluster.AssignMasters(3)
+		cluster.AssignMasters(size)
 		fmt.Println("Assign Slaves")
+		cluster.AssignSlaves()
 	} else if cluster.State == REDIS_OK {
 		fmt.Println("Assign Slaves")
+		cluster.AssignSlaves()
 	} else {
 		fmt.Println("cluster need manual repair")
 	}
