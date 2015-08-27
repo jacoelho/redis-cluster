@@ -2,11 +2,11 @@ package cluster
 
 import (
 	"errors"
+	"fmt"
 	"gopkg.in/redis.v3"
+	"sort"
 	"strconv"
 	"strings"
-
-	"fmt"
 )
 
 const CLUSTER_HASH_SLOTS = 16383 // 16384 with 0
@@ -42,6 +42,29 @@ type Cluster struct {
 	State           bool
 	Slots_assigned  int
 	Cluster_members []*ClusterNode
+}
+
+// A data structure to hold key/value pairs
+type Pair struct {
+	Key   string
+	Value int
+}
+
+// A slice of pairs that implements sort.Interface to sort by values
+type PairList []Pair
+
+func (p PairList) Len() int           { return len(p) }
+func (p PairList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p PairList) Less(i, j int) bool { return p[i].Value < p[j].Value }
+
+func convertToPairList(m map[string]int) PairList {
+	result := make(PairList, len(m))
+	i := 0
+	for k, v := range m {
+		result[i] = Pair{k, v}
+		i++
+	}
+	return result
 }
 
 func contains(slice []string, value string) bool {
@@ -256,19 +279,47 @@ func (cluster *Cluster) AssignMasters(size int) error {
 
 func (cluster *Cluster) AssignSlaves() error {
 	result := cluster.GetTopology()
+	masters := convertToPairList(result.masters)
 
-	fmt.Println(result)
+	for slave, client := range result.candidates {
+		sort.Sort(masters)
+		assigned := false
+
+		for idx, master := range masters {
+			if result.servers[master.Key] != result.servers[slave] {
+				err := client.ClusterReplicate(master.Key).Err()
+				if err != nil {
+					return err
+				}
+				masters[idx].Value += 1
+				assigned = true
+				break
+			}
+		}
+
+		if !assigned {
+			err := client.ClusterReplicate(masters[0].Key).Err()
+			if err != nil {
+				return err
+			}
+			masters[0].Value += 1
+		}
+	}
 	return nil
 }
 
 func (cluster *Cluster) Bootstrap(size int) error {
 	if cluster.State == REDIS_FAIL && cluster.Slots_assigned == 0 {
 		cluster.AssignMasters(size)
-		fmt.Println("Assign Slaves")
-		cluster.AssignSlaves()
+		err := cluster.AssignSlaves()
+		if err != nil {
+			return err
+		}
 	} else if cluster.State == REDIS_OK {
-		fmt.Println("Assign Slaves")
-		cluster.AssignSlaves()
+		err := cluster.AssignSlaves()
+		if err != nil {
+			return err
+		}
 	} else {
 		fmt.Println("cluster need manual repair")
 	}

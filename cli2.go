@@ -8,8 +8,8 @@ import (
 )
 
 func GetAZ() string {
-	values := []string{"AZ1", "AZ2", "AZ3"}
-	return values[rand.Intn(2)]
+	values := []string{"AZ1", "AZ2", "AZ3", "AZ4", "AZ5", "AZ6", "AZ7", "AZ8"}
+	return values[rand.Intn(8)]
 }
 
 func main() {
@@ -19,15 +19,14 @@ func main() {
 	for idx, arg := range args {
 		servers[idx] = fmt.Sprintf("%s:6379,%s", arg, GetAZ())
 	}
-	fmt.Println(servers)
 	redisCluster := cluster.NewCluster(servers)
 	if redisCluster == nil {
 		panic("error creating cluster")
 	}
 
-	redisCluster.Bootstrap(4)
-
-	for _, item := range redisCluster.Cluster_members {
-		fmt.Println(item)
+	err := redisCluster.Bootstrap(4)
+	if err != nil {
+		panic(err)
 	}
+
 }
