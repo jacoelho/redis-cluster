@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-const CLUSTER_HASH_SLOTS = 16383
+const CLUSTER_HASH_SLOTS = 16383 // 16384 with 0
 const CLUSTER_QUORUM = 3
 const REDIS_FAIL = false
 const REDIS_OK = true
@@ -28,7 +28,8 @@ type RedisNode struct {
 
 type ClusterTopology struct {
 	masters    map[string]int
-	candidates []string
+	candidates map[string]*redis.Client
+	servers    map[string]string
 }
 
 type ClusterNode struct {
@@ -113,14 +114,32 @@ func MeetNode(client *redis.Client, address string) error {
 	return nil
 }
 
-func GetTopology(client *redis.Client) *ClusterTopology {
+func (cluster *Cluster) GetClient(address string) *redis.Client {
+	for _, item := range cluster.Cluster_members {
+		if item.address == address {
+			return item.client
+		}
+	}
+	return nil
+}
+
+func (cluster *Cluster) GetTopology() *ClusterTopology {
+	client := cluster.Cluster_members[0].client
 	nodes := GetNodes(client)
 	result := &ClusterTopology{
 		masters:    make(map[string]int),
-		candidates: make([]string, 0),
+		candidates: make(map[string]*redis.Client),
+		servers:    make(map[string]string),
 	}
 
 	for _, node := range nodes {
+		// set pod
+		for _, item := range cluster.Cluster_members {
+			if item.address == node.addr {
+				result.servers[node.id] = item.pod
+			}
+		}
+
 		if node.master != "-" {
 			result.masters[node.master] += 1
 		} else if node.master == "-" && len(node.slots) > 0 {
@@ -128,7 +147,7 @@ func GetTopology(client *redis.Client) *ClusterTopology {
 				result.masters[node.id] = 0
 			}
 		} else {
-			result.candidates = append(result.candidates, node.addr)
+			result.candidates[node.id] = cluster.GetClient(node.addr)
 		}
 	}
 	return result
@@ -236,10 +255,9 @@ func (cluster *Cluster) AssignMasters(size int) error {
 }
 
 func (cluster *Cluster) AssignSlaves() error {
-	pivotal := cluster.Cluster_members[0]
+	result := cluster.GetTopology()
 
-	fmt.Println(GetTopology(pivotal.client))
-
+	fmt.Println(result)
 	return nil
 }
 
