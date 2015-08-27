@@ -81,11 +81,10 @@ func parseNode(line string) *ClusterNode {
 }
 
 func GenerateClusterSlots(clusterSize int) [][]int {
-	// lets slot it
 	step := CLUSTER_HASH_SLOTS / clusterSize
 	result := make([][]int, clusterSize)
-	for i := 0; i < clusterSize; i++ {
 
+	for i := 0; i < clusterSize; i++ {
 		first := i * step
 		last := (i + 1) * step
 
@@ -97,6 +96,7 @@ func GenerateClusterSlots(clusterSize int) [][]int {
 			last = CLUSTER_HASH_SLOTS
 		}
 
+		// avoid issues with step size 1
 		if first == last {
 			result[i] = []int{first}
 		} else {
@@ -210,6 +210,14 @@ func CheckKnownNodes(client *redis.Client) map[string]*ClusterNode {
 	return result
 }
 
+func CheckClusterStatus(client *redis.Client) bool {
+	result := client.ClusterInfo().Val()
+	if strings.Contains(result, "cluster_state:ok") {
+		return true
+	}
+	return false
+}
+
 func CheckCluster(redisCluster *Cluster) (unassigned []string, masterCount map[string]int) {
 	unassigned = make([]string, 0)
 	masterCount = make(map[string]int)
@@ -266,7 +274,7 @@ func AssignClusterSlots(unassigned []string, clusterSize int) error {
 			},
 		)
 
-		// range 1000-2000 or single value 1000 1001
+		// range [1000 2000] or single value [1000] [1001]
 		if len(slots[idx]) > 1 {
 			client.ClusterAddSlotsRange(slots[idx][0], slots[idx][1])
 		} else {

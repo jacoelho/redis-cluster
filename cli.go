@@ -25,15 +25,12 @@ func main() {
 
 	unassigned, count := cluster.CheckCluster(redisCluster)
 
-	fmt.Print("-->", count)
-
 	if len(count) > 0 && len(count) < 3 {
 		panic("something is wrong")
 	}
 
-	fmt.Println("unassigned", unassigned)
 	if len(count) == 0 {
-		err := cluster.AssignClusterSlots(unassigned, 4)
+		err := cluster.AssignClusterSlots(unassigned, 3)
 		if err != nil {
 			fmt.Println(err)
 		}
