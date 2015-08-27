@@ -246,7 +246,6 @@ func AssignSlaves(unassigned []string, masterCount map[string]int) {
 		tmp := convertToPairList(masterCount)
 		sort.Sort(tmp)
 
-		fmt.Println("adding", item, "as slave of", tmp[0].Key)
 		AddSlave(item, tmp[0].Key)
 		masterCount[tmp[0].Key] += 1
 	}
@@ -267,8 +266,7 @@ func AssignClusterSlots(unassigned []string, clusterSize int) error {
 			},
 		)
 
-		fmt.Println("assing slot", slots[idx], "to", server)
-
+		// range 1000-2000 or single value 1000 1001
 		if len(slots[idx]) > 1 {
 			client.ClusterAddSlotsRange(slots[idx][0], slots[idx][1])
 		} else {

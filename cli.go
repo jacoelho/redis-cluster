@@ -37,12 +37,13 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		}
+		time.Sleep(5 * 1000 * time.Millisecond)
 	}
 
 	unassigned, count = cluster.CheckCluster(redisCluster)
 
-	//cluster.AssignSlaves(unassigned, count)
+	cluster.AssignSlaves(unassigned, count)
 
-	fmt.Println(cluster.CheckCluster(redisCluster))
+	//fmt.Println(cluster.CheckCluster(redisCluster))
 
 }
