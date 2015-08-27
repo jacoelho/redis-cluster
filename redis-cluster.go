@@ -1,17 +1,15 @@
-package aws
+package main
 
 import (
 	"fmt"
-	"strings"
+	"os"
+	"redis-cluster/cluster.v2"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
 func main() {
-	// Create an EC2 service object in the "us-west-2" region
-	// Note that you can also configure your region globally by
-	// exporting the AWS_REGION environment variable
 	svc := ec2.New(&aws.Config{Region: aws.String("us-west-1")})
 
 	params := &ec2.DescribeInstancesInput{
@@ -38,16 +36,22 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println(resp)
-
-	var privateIpAddress []string
-	// resp has all of the response data, pull out instance IDs:
-	fmt.Println("> Number of reservation sets: ", len(resp.Reservations))
+	servers := make([]string, len(resp.Reservations))
 	for idx, _ := range resp.Reservations {
 		for _, inst := range resp.Reservations[idx].Instances {
-			privateIpAddress = append(privateIpAddress, *inst.PrivateIpAddress)
+			servers = append(servers, fmt.Sprintf("%s:6379,%s", *inst.PrivateIpAddress, *inst.Placement.AvailabilityZone))
 		}
 	}
 
-	fmt.Println(strings.Join(privateIpAddress, ","))
+	redisCluster := cluster.NewCluster(servers)
+	if redisCluster == nil {
+		fmt.Println("error creating cluster")
+		os.Exit(1)
+	}
+
+	err = redisCluster.Bootstrap(4)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }

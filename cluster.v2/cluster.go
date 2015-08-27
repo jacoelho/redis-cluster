@@ -147,6 +147,10 @@ func (cluster *Cluster) GetClient(address string) *redis.Client {
 }
 
 func (cluster *Cluster) GetTopology() *ClusterTopology {
+	if len(cluster.Cluster_members) < CLUSTER_QUORUM {
+		return nil
+	}
+
 	client := cluster.Cluster_members[0].client
 	nodes := GetNodes(client)
 	result := &ClusterTopology{
@@ -279,6 +283,11 @@ func (cluster *Cluster) AssignMasters(size int) error {
 
 func (cluster *Cluster) AssignSlaves() error {
 	result := cluster.GetTopology()
+
+	if result == nil || len(result.masters) < CLUSTER_QUORUM {
+		return errors.New("cannt assign slaves without masters")
+	}
+
 	masters := convertToPairList(result.masters)
 
 	for slave, client := range result.candidates {
