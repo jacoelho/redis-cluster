@@ -1,0 +1,12 @@
+dns:
+  image: mgood/resolvable
+  ports:
+    - "53/udp:53/udp"
+  volumes:
+    - "/var/run/docker.sock:/tmp/docker.sock"
+
+redis:
+  build: docker/redis/
+
+tribs:
+  build: docker/redis-trib/
