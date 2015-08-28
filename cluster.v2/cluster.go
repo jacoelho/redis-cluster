@@ -225,6 +225,9 @@ func NewCluster(initialList []string) *Cluster {
 	}
 
 	for _, address := range initialList {
+		if len(strings.Split(address, ",")) != 2 {
+			continue
+		}
 		ip := strings.Split(address, ",")[0]
 		pod := strings.Split(address, ",")[1]
 

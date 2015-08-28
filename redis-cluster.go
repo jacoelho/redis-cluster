@@ -36,13 +36,14 @@ func main() {
 		panic(err)
 	}
 
-	servers := make([]string, len(resp.Reservations))
+	servers := make([]string, 0)
 	for idx, _ := range resp.Reservations {
 		for _, inst := range resp.Reservations[idx].Instances {
 			servers = append(servers, fmt.Sprintf("%s:6379,%s", *inst.PrivateIpAddress, *inst.Placement.AvailabilityZone))
 		}
 	}
 
+	fmt.Println("server list:", servers)
 	redisCluster := cluster.NewCluster(servers)
 	if redisCluster == nil {
 		fmt.Println("error creating cluster")
