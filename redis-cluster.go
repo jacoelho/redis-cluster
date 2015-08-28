@@ -50,7 +50,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = redisCluster.Bootstrap(4)
+	err = redisCluster.Bootstrap(3)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
