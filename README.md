@@ -1,10 +1,12 @@
 # redis-cluster
 
-redis cluster made easy.
+redis cluster auto-assemble and auto-healing using an AWS auto scaling group.
 
 ## How it works
 
-* retrieves redis cluster members from aws tag
+* setup an auto scaling group in multiple availability zones
+* setup redis-cluster to run at startup (upstart,cloud-init,etc)
+* redis-cluster retrieves redis cluster members from aws tag
 * based on availability zones assigns masters and slaves nodes
 
 ## Usage 
