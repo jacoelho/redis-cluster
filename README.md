@@ -10,3 +10,5 @@ redis cluster made easy.
 ## Usage 
 
 redis-cluster --tag redis --masters 3
+
+This application should be called from within a running instance.
