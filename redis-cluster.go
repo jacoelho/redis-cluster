@@ -11,7 +11,7 @@ import (
 	"github.com/codegangsta/cli"
 )
 
-func AssembleCluster(tag string, size int) error {
+func AssembleCluster(tag string, size int, port string) error {
 	metadata := ec2metadata.New(&ec2metadata.Config{})
 
 	region, err := metadata.Region()
@@ -43,14 +43,20 @@ func AssembleCluster(tag string, size int) error {
 	resp, err := svc.DescribeInstances(params)
 
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	servers := make([]string, 0)
 	for idx, _ := range resp.Reservations {
 		for _, inst := range resp.Reservations[idx].Instances {
-			servers = append(servers, fmt.Sprintf("%s:6379,%s", *inst.PrivateIpAddress, *inst.Placement.AvailabilityZone))
+			servers = append(servers, fmt.Sprintf("%s:%s,%s", *inst.PrivateIpAddress, port, *inst.Placement.AvailabilityZone))
 		}
+	}
+
+	if len(servers) < 3 {
+		fmt.Println("invalid cluster size")
+		os.Exit(1)
 	}
 
 	fmt.Println("server list:", servers)
@@ -84,11 +90,17 @@ func main() {
 			Value: "redis",
 			Usage: "aws tag to use",
 		},
+		cli.StringFlag{
+			Name:  "port",
+			Value: "6379",
+			Usage: "redis port",
+		},
 	}
 
 	app.Action = func(c *cli.Context) {
 		cluster_size := c.Int("cluster_size")
 		tag := c.String("tag")
+		port := c.String("port")
 
 		if cluster_size < 3 {
 			fmt.Println("invalid cluster size")
@@ -100,7 +112,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		AssembleCluster(tag, cluster_size)
+		AssembleCluster(tag, cluster_size, port)
 
 	}
 

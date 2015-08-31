@@ -127,8 +127,9 @@ func parseNodeOutput(line string) *RedisNode {
 }
 
 func MeetNode(client *redis.Client, address string) error {
-	ip := strings.Split(address, ":")[0]
-	port := strings.Split(address, ":")[1]
+	addr := strings.Split(address, ",")[0]
+	ip := strings.Split(addr, ":")[0]
+	port := strings.Split(addr, ":")[1]
 
 	err := client.ClusterMeet(ip, port).Err()
 	if err != nil {
@@ -238,13 +239,13 @@ func NewCluster(initialList []string) *Cluster {
 			},
 		)
 
-		// get known nodes
-		nodes := GetNodes(client)
-
 		// meet if needed
 		for _, neighbour := range initialList {
-			if _, ok := nodes[neighbour]; !ok {
-				MeetNode(client, neighbour)
+			fmt.Println("sending meet", address, neighbour)
+			err := MeetNode(client, neighbour)
+			if err != nil {
+				fmt.Println(err)
+				return nil
 			}
 		}
 
