@@ -81,7 +81,7 @@ func main() {
 	app.Usage = "auto redis-cluster"
 	app.Flags = []cli.Flag{
 		cli.IntFlag{
-			Name:  "cluster_size",
+			Name:  "masters",
 			Value: 3,
 			Usage: "number of masters",
 		},
@@ -98,7 +98,7 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) {
-		cluster_size := c.Int("cluster_size")
+		cluster_size := c.Int("masters")
 		tag := c.String("tag")
 		port := c.String("port")
 
