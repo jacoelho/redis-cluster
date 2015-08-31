@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const CLUSTER_HASH_SLOTS = 16383 // 16384 with 0
@@ -248,6 +249,9 @@ func NewCluster(initialList []string) *Cluster {
 				return nil
 			}
 		}
+
+		// wait converge
+		time.Sleep(5 * 1000 * time.Millisecond)
 
 		new_state, slots := GetClusterInfo(client)
 
