@@ -6,11 +6,21 @@ import (
 	"redis-cluster/cluster.v2"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/codegangsta/cli"
 )
 
-func main() {
-	svc := ec2.New(&aws.Config{Region: aws.String("us-west-1")})
+func AssembleCluster(tag string, size int) error {
+	metadata := ec2metadata.New(&ec2metadata.Config{})
+
+	region, err := metadata.Region()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	svc := ec2.New(&aws.Config{Region: aws.String(region)})
 
 	params := &ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
@@ -23,7 +33,7 @@ func main() {
 			{
 				Name: aws.String("tag:role"),
 				Values: []*string{
-					aws.String("redis"),
+					aws.String(tag),
 				},
 			},
 		},
@@ -50,9 +60,50 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = redisCluster.Bootstrap(3)
+	err = redisCluster.Bootstrap(size)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	return nil
+}
+
+func main() {
+	app := cli.NewApp()
+	app.Name = "redis-cluster"
+	app.Usage = "auto redis-cluster"
+	app.Flags = []cli.Flag{
+		cli.IntFlag{
+			Name:  "cluster_size",
+			Value: 3,
+			Usage: "number of masters",
+		},
+		cli.StringFlag{
+			Name:  "tag",
+			Value: "redis",
+			Usage: "aws tag to use",
+		},
+	}
+
+	app.Action = func(c *cli.Context) {
+		cluster_size := c.Int("cluster_size")
+		tag := c.String("tag")
+
+		if cluster_size < 3 {
+			fmt.Println("invalid cluster size")
+			os.Exit(1)
+		}
+
+		if len(tag) < 1 {
+			fmt.Println("invalid flag")
+			os.Exit(1)
+		}
+
+		AssembleCluster(tag, cluster_size)
+
+	}
+
+	app.Run(os.Args)
+
 }
