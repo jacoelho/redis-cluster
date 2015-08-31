@@ -19,3 +19,9 @@ redis cluster auto-assemble and auto-healing using an AWS auto scaling group.
 redis-cluster --tag redis --masters 3
 
 This application should be called from within a running instance.
+
+## FAQ
+
+1. What happens if I change numbers of masters after setup?
+
+It will be ignored.
