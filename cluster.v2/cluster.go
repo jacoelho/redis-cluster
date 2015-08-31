@@ -242,7 +242,6 @@ func NewCluster(initialList []string) *Cluster {
 
 		// meet if needed
 		for _, neighbour := range initialList {
-			fmt.Println("sending meet", address, neighbour)
 			err := MeetNode(client, neighbour)
 			if err != nil {
 				fmt.Println(err)
