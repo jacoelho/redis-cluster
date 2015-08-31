@@ -24,4 +24,4 @@ This application should be called from within a running instance.
 
 1. What happens if I change numbers of masters after setup?
 
-It will be ignored.
+After the initial cluster setup, the number of masters settings is ignored.
